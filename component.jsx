@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-const { useStoredState } = hatch;
+const { useStoredState, useUser } = hatch;
 
 const StartupTycoon = () => {
   const [showMenu, setShowMenu] = useState(true);
   const [gameStarted, setGameStarted] = useState(false);
   const [menuTab, setMenuTab] = useState('main'); // main, faq
   
-  const [gameState, setGameState] = useStoredState('startupTycoon', {
+  // Получаем данные пользователя для уникального ключа сохранения
+  const user = useUser();
+  const userSaveKey = `startupTycoon_${user.id}`;
+  
+  const [gameState, setGameState] = useStoredState(userSaveKey, {
     resources: {
       code: 100,
       ideas: 50,
@@ -121,6 +125,49 @@ const StartupTycoon = () => {
   const returnToMenu = () => {
     setShowMenu(true);
     setGameStarted(false);
+  };
+
+  const resetUserData = () => {
+    if (confirm('Вы уверены, что хотите удалить все сохранения? Это действие нельзя отменить!')) {
+      setGameState({
+        resources: {
+          code: 100,
+          ideas: 50,
+          money: 1000,
+          reputation: 10,
+          energy: 80
+        },
+        skills: {
+          frontend: 1,
+          backend: 1,
+          design: 0,
+          marketing: 0,
+          management: 0
+        },
+        company: {
+          stage: 'solo',
+          employees: 0,
+          products: 0,
+          users: 0,
+          revenue: 0
+        },
+        buildings: {
+          workspace: 1,
+          computer: 1,
+          coffee: 0,
+          office: 0,
+          server: 0,
+          lab: 0,
+          marketing: 0
+        },
+        day: 1,
+        level: 1,
+        exp: 0,
+        difficulty: 'normal'
+      });
+      setEvents([]);
+      setGameTime(0);
+    }
   };
 
   const buildings = {
@@ -497,13 +544,26 @@ const StartupTycoon = () => {
         </div>
       </div>
 
-      <div className="text-center mt-8">
+      <div className="text-center mt-8 space-y-4">
         <button
           onClick={() => setMenuTab('main')}
           className="px-8 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold text-lg transition-colors"
         >
           ← Назад к меню
         </button>
+        
+        <div className="bg-red-900 border border-red-600 p-4 rounded-lg">
+          <h4 className="font-bold text-red-400 mb-2">⚠️ Сброс данных</h4>
+          <p className="text-sm text-gray-300 mb-3">
+            Удалить все сохранения этого пользователя ({user.name})
+          </p>
+          <button
+            onClick={resetUserData}
+            className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded text-sm font-bold transition-colors"
+          >
+            🗑️ Сбросить все данные
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -546,10 +606,17 @@ const StartupTycoon = () => {
               <div className="mb-8">
                 <h1 className="text-5xl font-bold text-blue-400 mb-4">💻 СТАРТАП ТАЙКУН</h1>
                 <h2 className="text-2xl text-gray-300 mb-6">От кода к корпорации</h2>
-                <p className="text-lg text-gray-400 max-w-2xl mx-auto">
+                <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-4">
                   Начните как соло-разработчик и постройте IT-империю! Изучайте навыки, создавайте продукты, 
                   нанимайте команду и станьте tech-магнатом.
                 </p>
+                <div className="flex items-center justify-center gap-2 text-sm text-gray-500 bg-gray-800 px-4 py-2 rounded-lg inline-flex">
+                  <div 
+                    className="w-3 h-3 rounded-full" 
+                    style={{ backgroundColor: user.color }}
+                  ></div>
+                  <span>Добро пожаловать, {user.name}!</span>
+                </div>
               </div>
 
           {hasSavedGame && (
@@ -636,8 +703,16 @@ const StartupTycoon = () => {
             >
               ← Меню
             </button>
-            <div className="text-sm text-gray-400">
-              Сложность: {difficultySettings[currentDifficulty].name}
+            <div className="text-center">
+              <div className="text-sm text-gray-400">
+                Сложность: {difficultySettings[currentDifficulty].name}
+              </div>
+              <div className="text-xs text-gray-500">
+                Игрок: {user.name}
+              </div>
+            </div>
+            <div className="text-xs text-gray-500">
+              Автосохранение
             </div>
           </div>
           <h1 className="text-3xl font-bold text-blue-400 mb-2">💻 СТАРТАП ТАЙКУН: ОТ КОДА К КОРПОРАЦИИ</h1>
