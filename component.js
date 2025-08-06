@@ -1,0 +1,456 @@
+// <stdin>
+import React, { useState, useEffect } from "https://esm.sh/react@18.2.0";
+var { useStoredState } = hatch;
+var StartupTycoon = () => {
+  const [showMenu, setShowMenu] = useState(true);
+  const [gameStarted, setGameStarted] = useState(false);
+  const [menuTab, setMenuTab] = useState("main");
+  const [gameState, setGameState] = useStoredState("startupTycoon", {
+    resources: {
+      code: 100,
+      ideas: 50,
+      money: 1e3,
+      reputation: 10,
+      energy: 80
+    },
+    skills: {
+      frontend: 1,
+      backend: 1,
+      design: 0,
+      marketing: 0,
+      management: 0
+    },
+    company: {
+      stage: "solo",
+      // solo -> freelancer -> mvp -> startup -> company -> corporation
+      employees: 0,
+      products: 0,
+      users: 0,
+      revenue: 0
+    },
+    buildings: {
+      workspace: 1,
+      computer: 1,
+      coffee: 0,
+      office: 0,
+      server: 0,
+      lab: 0,
+      marketing: 0
+    },
+    day: 1,
+    level: 1,
+    exp: 0,
+    difficulty: "normal"
+    // easy, normal, hard
+  });
+  const [selectedBuilding, setSelectedBuilding] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [gameTime, setGameTime] = useState(0);
+  const hasSavedGame = gameState.day > 1 || gameState.company.products > 0 || gameState.resources.money !== 1e3;
+  const currentDifficulty = gameState.difficulty || "normal";
+  const difficultySettings = {
+    easy: {
+      name: "\u{1F60A} \u041B\u0451\u0433\u043A\u0438\u0439",
+      description: "\u0411\u043E\u043B\u044C\u0448\u0435 \u0440\u0435\u0441\u0443\u0440\u0441\u043E\u0432, \u043C\u0435\u043D\u044C\u0448\u0435 \u0440\u0430\u0441\u0445\u043E\u0434\u043E\u0432, \u0431\u043E\u043B\u044C\u0448\u0435 \u0441\u043E\u0431\u044B\u0442\u0438\u0439",
+      startResources: { code: 200, ideas: 100, money: 2e3, reputation: 20, energy: 100 },
+      multipliers: { income: 1.5, expenses: 0.7, events: 1.3 }
+    },
+    normal: {
+      name: "\u2696\uFE0F \u041E\u0431\u044B\u0447\u043D\u044B\u0439",
+      description: "\u0421\u0431\u0430\u043B\u0430\u043D\u0441\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u0430\u044F \u0438\u0433\u0440\u0430 \u0434\u043B\u044F \u0432\u0441\u0435\u0445",
+      startResources: { code: 100, ideas: 50, money: 1e3, reputation: 10, energy: 80 },
+      multipliers: { income: 1, expenses: 1, events: 1 }
+    },
+    hard: {
+      name: "\u{1F624} \u0421\u043B\u043E\u0436\u043D\u044B\u0439",
+      description: "\u041C\u0435\u043D\u044C\u0448\u0435 \u0440\u0435\u0441\u0443\u0440\u0441\u043E\u0432, \u0431\u043E\u043B\u044C\u0448\u0435 \u0440\u0430\u0441\u0445\u043E\u0434\u043E\u0432, \u0441\u0443\u0440\u043E\u0432\u044B\u0435 \u0441\u043E\u0431\u044B\u0442\u0438\u044F",
+      startResources: { code: 50, ideas: 25, money: 500, reputation: 5, energy: 60 },
+      multipliers: { income: 0.8, expenses: 1.3, events: 0.8 }
+    }
+  };
+  const startNewGame = (difficulty = "normal") => {
+    const settings = difficultySettings[difficulty];
+    setGameState({
+      resources: { ...settings.startResources },
+      skills: {
+        frontend: 1,
+        backend: 1,
+        design: 0,
+        marketing: 0,
+        management: 0
+      },
+      company: {
+        stage: "solo",
+        employees: 0,
+        products: 0,
+        users: 0,
+        revenue: 0
+      },
+      buildings: {
+        workspace: 1,
+        computer: 1,
+        coffee: 0,
+        office: 0,
+        server: 0,
+        lab: 0,
+        marketing: 0
+      },
+      day: 1,
+      level: 1,
+      exp: 0,
+      difficulty
+    });
+    setEvents([]);
+    setGameTime(0);
+    setShowMenu(false);
+    setGameStarted(true);
+  };
+  const continueGame = () => {
+    setShowMenu(false);
+    setGameStarted(true);
+  };
+  const returnToMenu = () => {
+    setShowMenu(true);
+    setGameStarted(false);
+  };
+  const buildings = {
+    workspace: {
+      name: "\u0420\u0430\u0431\u043E\u0447\u0435\u0435 \u043C\u0435\u0441\u0442\u043E",
+      cost: { money: 500, ideas: 5 },
+      effect: "+10 \u043A\u043E\u0434/\u0434\u0435\u043D\u044C",
+      icon: "\u{1F4BB}"
+    },
+    computer: {
+      name: "\u041C\u043E\u0449\u043D\u044B\u0439 \u043A\u043E\u043C\u043F",
+      cost: { money: 2e3, code: 50 },
+      effect: "+15 \u043A\u043E\u0434/\u0434\u0435\u043D\u044C, +5 \u044D\u043D\u0435\u0440\u0433\u0438\u044F",
+      icon: "\u{1F5A5}\uFE0F"
+    },
+    coffee: {
+      name: "\u041A\u043E\u0444\u0435-\u043C\u0430\u0448\u0438\u043D\u0430",
+      cost: { money: 800, energy: 10 },
+      effect: "+20 \u044D\u043D\u0435\u0440\u0433\u0438\u0438/\u0434\u0435\u043D\u044C",
+      icon: "\u2615"
+    },
+    office: {
+      name: "\u041E\u0444\u0438\u0441",
+      cost: { money: 1e4, reputation: 25 },
+      effect: "\u041C\u043E\u0436\u043D\u043E \u043D\u0430\u043D\u0438\u043C\u0430\u0442\u044C \u0434\u043E 5 \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u043E\u0432",
+      icon: "\u{1F3E2}"
+    },
+    server: {
+      name: "\u0421\u0435\u0440\u0432\u0435\u0440",
+      cost: { money: 5e3, code: 200 },
+      effect: "+50% \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0435\u0439 \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u043E\u0432",
+      icon: "\u{1F5B2}\uFE0F"
+    },
+    lab: {
+      name: "R&D \u043B\u0430\u0431\u0430",
+      cost: { money: 15e3, ideas: 100 },
+      effect: "+25 \u0438\u0434\u0435\u0439/\u0434\u0435\u043D\u044C",
+      icon: "\u{1F52C}"
+    },
+    marketing: {
+      name: "\u041C\u0430\u0440\u043A\u0435\u0442\u0438\u043D\u0433 \u043E\u0442\u0434\u0435\u043B",
+      cost: { money: 8e3, reputation: 15 },
+      effect: "+10 \u0440\u0435\u043F\u0443\u0442\u0430\u0446\u0438\u044F/\u0434\u0435\u043D\u044C",
+      icon: "\u{1F4C8}"
+    }
+  };
+  const randomEvents = [
+    {
+      title: "\u{1F3C6} \u0425\u0430\u043A\u0430\u0442\u043E\u043D",
+      description: "\u0412\u044B \u043F\u043E\u0431\u0435\u0434\u0438\u043B\u0438 \u0432 \u0445\u0430\u043A\u0430\u0442\u043E\u043D\u0435!",
+      effect: () => ({ code: 100, ideas: 50, reputation: 10 })
+    },
+    {
+      title: "\u{1F4B0} \u0418\u043D\u0432\u0435\u0441\u0442\u043E\u0440",
+      description: "\u0418\u043D\u0432\u0435\u0441\u0442\u043E\u0440 \u0437\u0430\u0438\u043D\u0442\u0435\u0440\u0435\u0441\u043E\u0432\u0430\u043B\u0441\u044F \u0432\u0430\u0448\u0438\u043C \u043F\u0440\u043E\u0435\u043A\u0442\u043E\u043C",
+      effect: () => ({ money: 5e3, reputation: 15 })
+    },
+    {
+      title: "\u{1F41B} \u041A\u0440\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0431\u0430\u0433",
+      description: "\u0412 \u043F\u0440\u043E\u0434\u0430\u043A\u0448\u0435\u043D\u0435 \u043E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D \u043A\u0440\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0431\u0430\u0433",
+      effect: () => ({ code: -50, reputation: -5, energy: -20 })
+    },
+    {
+      title: "\u{1F525} \u0412\u0438\u0440\u0443\u0441\u043D\u043E\u0441\u0442\u044C",
+      description: "\u0412\u0430\u0448 \u043F\u043E\u0441\u0442 \u0432 \u0441\u043E\u0446\u0441\u0435\u0442\u044F\u0445 \u0441\u0442\u0430\u043B \u0432\u0438\u0440\u0443\u0441\u043D\u044B\u043C!",
+      effect: () => ({ reputation: 20, users: 1e3 })
+    },
+    {
+      title: "\u{1F3AF} \u041D\u043E\u0432\u0430\u044F \u0438\u0434\u0435\u044F",
+      description: "\u0412\u043E \u0432\u0440\u0435\u043C\u044F \u0434\u0443\u0448\u0430 \u043F\u0440\u0438\u0448\u043B\u0430 \u0433\u0435\u043D\u0438\u0430\u043B\u044C\u043D\u0430\u044F \u0438\u0434\u0435\u044F!",
+      effect: () => ({ ideas: 75, energy: 10 })
+    },
+    {
+      title: "\u{1F4BB} \u0412\u044B\u0433\u043E\u0440\u0430\u043D\u0438\u0435",
+      description: "\u0412\u044B \u0447\u0443\u0432\u0441\u0442\u0432\u0443\u0435\u0442\u0435 \u0443\u0441\u0442\u0430\u043B\u043E\u0441\u0442\u044C \u043E\u0442 \u043A\u043E\u0434\u0438\u043D\u0433\u0430",
+      effect: () => ({ energy: -30, code: -25 })
+    },
+    {
+      title: "\u{1F4F1} \u041A\u043E\u043D\u043A\u0443\u0440\u0435\u043D\u0442",
+      description: "\u041A\u043E\u043D\u043A\u0443\u0440\u0435\u043D\u0442 \u0437\u0430\u043F\u0443\u0441\u0442\u0438\u043B \u043F\u043E\u0445\u043E\u0436\u0438\u0439 \u043F\u0440\u043E\u0434\u0443\u043A\u0442",
+      effect: () => ({ users: -500, reputation: -10 })
+    }
+  ];
+  useEffect(() => {
+    if (!gameStarted) return;
+    const interval = setInterval(() => {
+      setGameTime((prev) => prev + 1);
+      if (gameTime % 10 === 0) {
+        advanceDay();
+      }
+      if (gameTime % 30 === 0 && Math.random() < 0.3 * difficultySettings[currentDifficulty].multipliers.events) {
+        triggerRandomEvent();
+      }
+    }, 1e3);
+    return () => clearInterval(interval);
+  }, [gameTime, gameStarted]);
+  const advanceDay = () => {
+    setGameState((prev) => {
+      const newState = { ...prev };
+      const difficulty = difficultySettings[prev.difficulty || "normal"];
+      newState.day += 1;
+      const baseCodeGen = (5 + (prev.skills.frontend + prev.skills.backend) * 3 + prev.skills.management * 2) * difficulty.multipliers.income;
+      const baseIdeasGen = (2 + prev.skills.design * 3 + prev.skills.marketing * 1) * difficulty.multipliers.income;
+      newState.resources.code += Math.floor(baseCodeGen);
+      newState.resources.ideas += Math.floor(baseIdeasGen);
+      newState.resources.energy += 10;
+      newState.resources.code += Math.floor(prev.buildings.workspace * 10 * difficulty.multipliers.income);
+      newState.resources.code += Math.floor(prev.buildings.computer * 15 * difficulty.multipliers.income);
+      newState.resources.energy += prev.buildings.coffee * 20;
+      newState.resources.energy += prev.buildings.computer * 5;
+      newState.resources.ideas += Math.floor(prev.buildings.lab * 25 * difficulty.multipliers.income);
+      newState.resources.reputation += prev.buildings.marketing * 10;
+      const managementBonus = 1 + prev.skills.management * 0.15;
+      newState.resources.code += Math.floor(prev.company.employees * 20 * difficulty.multipliers.income * managementBonus);
+      newState.resources.ideas += Math.floor(prev.company.employees * 5 * difficulty.multipliers.income * managementBonus);
+      if (prev.company.products > 0) {
+        const baseRevenue = prev.company.users * 0.1 * difficulty.multipliers.income;
+        const serverBonus = prev.buildings.server > 0 ? 1.5 : 1;
+        const marketingBonus = 1 + prev.skills.marketing * 0.1;
+        const revenue = Math.floor(baseRevenue * serverBonus * marketingBonus);
+        newState.company.revenue += revenue;
+        newState.resources.money += revenue;
+      }
+      newState.resources.energy -= prev.company.employees * 5;
+      newState.resources.money -= Math.floor(prev.company.employees * 100 * difficulty.multipliers.expenses);
+      newState.resources.money -= Math.floor(prev.buildings.office * 500 * difficulty.multipliers.expenses);
+      newState.exp += 10 + prev.company.employees * 2;
+      if (newState.exp >= newState.level * 100) {
+        newState.level += 1;
+        newState.exp = 0;
+        newState.resources.ideas += 20;
+        newState.resources.reputation += 5;
+      }
+      if (prev.company.stage === "solo" && newState.resources.money >= 5e3) {
+        newState.company.stage = "freelancer";
+      }
+      if (prev.company.stage === "freelancer" && newState.company.products >= 1) {
+        newState.company.stage = "mvp";
+      }
+      if (prev.company.stage === "mvp" && newState.company.employees >= 2) {
+        newState.company.stage = "startup";
+      }
+      if (prev.company.stage === "startup" && newState.company.employees >= 10) {
+        newState.company.stage = "company";
+      }
+      if (prev.company.stage === "company" && newState.resources.money >= 1e5) {
+        newState.company.stage = "corporation";
+      }
+      Object.keys(newState.resources).forEach((resource) => {
+        newState.resources[resource] = Math.max(0, Math.min(999999, newState.resources[resource]));
+      });
+      return newState;
+    });
+  };
+  const triggerRandomEvent = () => {
+    const event = randomEvents[Math.floor(Math.random() * randomEvents.length)];
+    const effect = event.effect();
+    setEvents((prev) => [event, ...prev.slice(0, 2)]);
+    setGameState((prev) => {
+      const newState = { ...prev };
+      Object.keys(effect).forEach((key) => {
+        if (key === "users") {
+          newState.company.users += effect[key];
+        } else if (newState.resources[key] !== void 0) {
+          newState.resources[key] += effect[key];
+        }
+      });
+      return newState;
+    });
+  };
+  const canBuild = (buildingType) => {
+    const building = buildings[buildingType];
+    return Object.keys(building.cost).every(
+      (resource) => gameState.resources[resource] >= building.cost[resource]
+    );
+  };
+  const buildStructure = (buildingType) => {
+    if (!canBuild(buildingType)) return;
+    setGameState((prev) => {
+      const newState = { ...prev };
+      const building = buildings[buildingType];
+      Object.keys(building.cost).forEach((resource) => {
+        newState.resources[resource] -= building.cost[resource];
+      });
+      newState.buildings[buildingType] += 1;
+      return newState;
+    });
+  };
+  const learnSkill = (skill) => {
+    const cost = (gameState.skills[skill] + 1) * 50;
+    if (gameState.resources.code >= cost && gameState.resources.ideas >= cost / 2) {
+      setGameState((prev) => ({
+        ...prev,
+        resources: {
+          ...prev.resources,
+          code: prev.resources.code - cost,
+          ideas: prev.resources.ideas - cost / 2
+        },
+        skills: {
+          ...prev.skills,
+          [skill]: prev.skills[skill] + 1
+        }
+      }));
+    }
+  };
+  const createProduct = () => {
+    const cost = { code: 200, ideas: 100, money: 1e3 };
+    if (Object.keys(cost).every((res) => gameState.resources[res] >= cost[res])) {
+      setGameState((prev) => {
+        const baseUsers = 100;
+        const designBonus = 1 + prev.skills.design * 0.2;
+        const marketingBonus = 1 + prev.skills.marketing * 0.15;
+        const newUsers = Math.floor(baseUsers * designBonus * marketingBonus);
+        return {
+          ...prev,
+          resources: {
+            ...prev.resources,
+            code: prev.resources.code - cost.code,
+            ideas: prev.resources.ideas - cost.ideas,
+            money: prev.resources.money - cost.money
+          },
+          company: {
+            ...prev.company,
+            products: prev.company.products + 1,
+            users: prev.company.users + newUsers
+          }
+        };
+      });
+    }
+  };
+  const hireEmployee = () => {
+    const cost = 2e3 + gameState.company.employees * 500;
+    if (gameState.resources.money >= cost && gameState.resources.reputation >= 10) {
+      setGameState((prev) => ({
+        ...prev,
+        resources: {
+          ...prev.resources,
+          money: prev.resources.money - cost,
+          reputation: prev.resources.reputation - 10
+        },
+        company: {
+          ...prev.company,
+          employees: prev.company.employees + 1
+        }
+      }));
+    }
+  };
+  const getStatusColor = (value, max) => {
+    const percentage = value / max * 100;
+    if (percentage > 70) return "text-green-500";
+    if (percentage > 30) return "text-yellow-500";
+    return "text-red-500";
+  };
+  const renderFAQ = () => /* @__PURE__ */ React.createElement("div", { className: "text-left max-w-4xl mx-auto" }, /* @__PURE__ */ React.createElement("h2", { className: "text-3xl font-bold text-blue-400 mb-6 text-center" }, "\u2753 FAQ \u0438 \u0413\u0430\u0439\u0434 \u043F\u043E \u0438\u0433\u0440\u0435"), /* @__PURE__ */ React.createElement("div", { className: "space-y-6" }, /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-6 rounded-lg" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold text-green-400 mb-3" }, "\u{1F3AF} \u0427\u0442\u043E \u0434\u0430\u044E\u0442 \u043D\u0430\u0432\u044B\u043A\u0438?"), /* @__PURE__ */ React.createElement("div", { className: "space-y-3 text-sm" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F4BB} Frontend:"), " +3 \u043A\u043E\u0434\u0430 \u0432 \u0434\u0435\u043D\u044C \u0437\u0430 \u0443\u0440\u043E\u0432\u0435\u043D\u044C"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u2699\uFE0F Backend:"), " +3 \u043A\u043E\u0434\u0430 \u0432 \u0434\u0435\u043D\u044C \u0437\u0430 \u0443\u0440\u043E\u0432\u0435\u043D\u044C"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F3A8} Design:"), " +3 \u0438\u0434\u0435\u0438 \u0432 \u0434\u0435\u043D\u044C \u0437\u0430 \u0443\u0440\u043E\u0432\u0435\u043D\u044C + 20% \u0431\u043E\u043B\u044C\u0448\u0435 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0435\u0439 \u043F\u0440\u0438 \u0441\u043E\u0437\u0434\u0430\u043D\u0438\u0438 \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u0430"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F4C8} Marketing:"), " +1 \u0438\u0434\u0435\u044F \u0432 \u0434\u0435\u043D\u044C \u0437\u0430 \u0443\u0440\u043E\u0432\u0435\u043D\u044C + 10% \u0434\u043E\u0445\u043E\u0434 \u0441 \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u043E\u0432 + 15% \u0431\u043E\u043B\u044C\u0448\u0435 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0435\u0439"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F454} Management:"), " +2 \u043A\u043E\u0434\u0430 \u0432 \u0434\u0435\u043D\u044C \u0437\u0430 \u0443\u0440\u043E\u0432\u0435\u043D\u044C + 15% \u044D\u0444\u0444\u0435\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u044C \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u043E\u0432"))), /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-6 rounded-lg" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold text-purple-400 mb-3" }, "\u{1F680} \u0421\u0442\u0430\u0434\u0438\u0438 \u0440\u0430\u0437\u0432\u0438\u0442\u0438\u044F"), /* @__PURE__ */ React.createElement("div", { className: "space-y-2 text-sm" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F9D1}\u200D\u{1F4BB} \u0421\u043E\u043B\u043E-\u0440\u0430\u0437\u0440\u0430\u0431\u043E\u0442\u0447\u0438\u043A:"), " \u0418\u0437\u0443\u0447\u0430\u0439\u0442\u0435 \u043D\u0430\u0432\u044B\u043A\u0438, \u043D\u0430\u043A\u0430\u043F\u043B\u0438\u0432\u0430\u0439\u0442\u0435 \u0440\u0435\u0441\u0443\u0440\u0441\u044B"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F4BC} \u0424\u0440\u0438\u043B\u0430\u043D\u0441\u0435\u0440:"), " \u041D\u0430\u043A\u043E\u043F\u0438\u0442\u0435 $5000 \u0434\u043B\u044F \u043F\u0435\u0440\u0435\u0445\u043E\u0434\u0430"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F680} MVP:"), " \u0421\u043E\u0437\u0434\u0430\u0439\u0442\u0435 \u043F\u0435\u0440\u0432\u044B\u0439 \u043F\u0440\u043E\u0434\u0443\u043A\u0442 (200 \u043A\u043E\u0434, 100 \u0438\u0434\u0435\u0439, $1000)"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u2B50 \u0421\u0442\u0430\u0440\u0442\u0430\u043F:"), " \u041D\u0430\u0439\u043C\u0438\u0442\u0435 2+ \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u043E\u0432"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F3E2} \u041A\u043E\u043C\u043F\u0430\u043D\u0438\u044F:"), " \u0420\u0430\u0441\u0448\u0438\u0440\u044C\u0442\u0435\u0441\u044C \u0434\u043E 10+ \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u043E\u0432"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F30D} \u041A\u043E\u0440\u043F\u043E\u0440\u0430\u0446\u0438\u044F:"), " \u041D\u0430\u043A\u043E\u043F\u0438\u0442\u0435 $100,000 \u043A\u0430\u043F\u0438\u0442\u0430\u043B\u0430"))), /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-6 rounded-lg" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold text-yellow-400 mb-3" }, "\u{1F4B0} \u041A\u0430\u043A \u0437\u0430\u0440\u0430\u0431\u0430\u0442\u044B\u0432\u0430\u0442\u044C \u0434\u0435\u043D\u044C\u0433\u0438?"), /* @__PURE__ */ React.createElement("div", { className: "space-y-2 text-sm" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u041F\u0440\u043E\u0434\u0443\u043A\u0442\u044B:"), " \u041A\u0430\u0436\u0434\u044B\u0439 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044C \u043F\u0440\u0438\u043D\u043E\u0441\u0438\u0442 $0.1 \u0432 \u0434\u0435\u043D\u044C"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u0421\u0435\u0440\u0432\u0435\u0440:"), " \u0423\u0432\u0435\u043B\u0438\u0447\u0438\u0432\u0430\u0435\u0442 \u0434\u043E\u0445\u043E\u0434 \u0441 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0435\u0439 \u043D\u0430 50%"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u041C\u0430\u0440\u043A\u0435\u0442\u0438\u043D\u0433:"), " +10% \u0434\u043E\u0445\u043E\u0434 \u0437\u0430 \u043A\u0430\u0436\u0434\u044B\u0439 \u0443\u0440\u043E\u0432\u0435\u043D\u044C \u043D\u0430\u0432\u044B\u043A\u0430"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u0421\u043E\u0431\u044B\u0442\u0438\u044F:"), " \u0418\u043D\u0432\u0435\u0441\u0442\u043E\u0440\u044B, \u0445\u0430\u043A\u0430\u0442\u043E\u043D\u044B, \u0432\u0438\u0440\u0443\u0441\u043D\u044B\u0435 \u043F\u043E\u0441\u0442\u044B"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u0421\u043E\u0432\u0435\u0442:"), " \u0421\u043E\u0437\u0434\u0430\u0432\u0430\u0439\u0442\u0435 \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u044B \u2192 \u043F\u043E\u043B\u0443\u0447\u0430\u0439\u0442\u0435 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0435\u0439 \u2192 \u0434\u043E\u0445\u043E\u0434 \u0440\u0430\u0441\u0442\u0435\u0442"))), /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-6 rounded-lg" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold text-red-400 mb-3" }, "\u{1F3D7}\uFE0F \u041E\u0431\u043E\u0440\u0443\u0434\u043E\u0432\u0430\u043D\u0438\u0435 \u0438 \u043F\u043E\u0441\u0442\u0440\u043E\u0439\u043A\u0438"), /* @__PURE__ */ React.createElement("div", { className: "space-y-2 text-sm" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F4BB} \u0420\u0430\u0431\u043E\u0447\u0435\u0435 \u043C\u0435\u0441\u0442\u043E:"), " +10 \u043A\u043E\u0434/\u0434\u0435\u043D\u044C ($500, 5 \u0438\u0434\u0435\u0439)"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F5A5}\uFE0F \u041C\u043E\u0449\u043D\u044B\u0439 \u043A\u043E\u043C\u043F:"), " +15 \u043A\u043E\u0434/\u0434\u0435\u043D\u044C, +5 \u044D\u043D\u0435\u0440\u0433\u0438\u044F ($2000, 50 \u043A\u043E\u0434)"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u2615 \u041A\u043E\u0444\u0435-\u043C\u0430\u0448\u0438\u043D\u0430:"), " +20 \u044D\u043D\u0435\u0440\u0433\u0438\u044F/\u0434\u0435\u043D\u044C ($800, 10 \u044D\u043D\u0435\u0440\u0433\u0438\u044F)"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F3E2} \u041E\u0444\u0438\u0441:"), " \u041F\u043E\u0437\u0432\u043E\u043B\u044F\u0435\u0442 \u043D\u0430\u043D\u0438\u043C\u0430\u0442\u044C \u0434\u043E 5 \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u043E\u0432 ($10000, 25 \u0440\u0435\u043F\u0443\u0442\u0430\u0446\u0438\u044F)"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F5B2}\uFE0F \u0421\u0435\u0440\u0432\u0435\u0440:"), " +50% \u0434\u043E\u0445\u043E\u0434 \u0441 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0435\u0439 ($5000, 200 \u043A\u043E\u0434)"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F52C} R&D \u043B\u0430\u0431\u0430:"), " +25 \u0438\u0434\u0435\u0439/\u0434\u0435\u043D\u044C ($15000, 100 \u0438\u0434\u0435\u0439)"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F4C8} \u041C\u0430\u0440\u043A\u0435\u0442\u0438\u043D\u0433 \u043E\u0442\u0434\u0435\u043B:"), " +10 \u0440\u0435\u043F\u0443\u0442\u0430\u0446\u0438\u044F/\u0434\u0435\u043D\u044C ($8000, 15 \u0440\u0435\u043F\u0443\u0442\u0430\u0446\u0438\u044F)"))), /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-6 rounded-lg" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold text-blue-400 mb-3" }, "\u{1F4A1} \u0421\u043E\u0432\u0435\u0442\u044B \u043F\u043E \u0438\u0433\u0440\u0435"), /* @__PURE__ */ React.createElement("div", { className: "space-y-2 text-sm" }, /* @__PURE__ */ React.createElement("div", null, "\u2022 ", /* @__PURE__ */ React.createElement("strong", null, "\u041D\u0430\u0447\u0430\u043B\u043E:"), " \u041F\u0440\u043E\u043A\u0430\u0447\u0438\u0432\u0430\u0439\u0442\u0435 Frontend \u0438 Backend \u0434\u043B\u044F \u0431\u043E\u043B\u044C\u0448\u0435\u0433\u043E \u043A\u043E\u0434\u0430"), /* @__PURE__ */ React.createElement("div", null, "\u2022 ", /* @__PURE__ */ React.createElement("strong", null, "\u0414\u0435\u043D\u044C\u0433\u0438:"), " \u0421\u043E\u0437\u0434\u0430\u0432\u0430\u0439\u0442\u0435 \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u044B \u043A\u0430\u043A \u043C\u043E\u0436\u043D\u043E \u0440\u0430\u043D\u044C\u0448\u0435 \u0434\u043B\u044F \u0434\u043E\u0445\u043E\u0434\u0430"), /* @__PURE__ */ React.createElement("div", null, "\u2022 ", /* @__PURE__ */ React.createElement("strong", null, "\u041A\u043E\u043C\u0430\u043D\u0434\u0430:"), " \u041D\u0430\u043D\u0438\u043C\u0430\u0439\u0442\u0435 \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u043E\u0432 \u0442\u043E\u043B\u044C\u043A\u043E \u043A\u043E\u0433\u0434\u0430 \u0435\u0441\u0442\u044C \u0441\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u044B\u0439 \u0434\u043E\u0445\u043E\u0434"), /* @__PURE__ */ React.createElement("div", null, "\u2022 ", /* @__PURE__ */ React.createElement("strong", null, "\u0414\u0438\u0437\u0430\u0439\u043D:"), " \u041F\u0440\u043E\u043A\u0430\u0447\u0438\u0432\u0430\u0439\u0442\u0435 \u043F\u0435\u0440\u0435\u0434 \u0441\u043E\u0437\u0434\u0430\u043D\u0438\u0435\u043C \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u043E\u0432 \u0434\u043B\u044F \u0431\u043E\u043B\u044C\u0448\u0438\u0445 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0435\u0439"), /* @__PURE__ */ React.createElement("div", null, "\u2022 ", /* @__PURE__ */ React.createElement("strong", null, "\u041C\u0435\u043D\u0435\u0434\u0436\u043C\u0435\u043D\u0442:"), " \u0412\u0430\u0436\u0435\u043D \u043F\u0440\u0438 \u0431\u043E\u043B\u044C\u0448\u043E\u0439 \u043A\u043E\u043C\u0430\u043D\u0434\u0435 (+15% \u044D\u0444\u0444\u0435\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u044C)"), /* @__PURE__ */ React.createElement("div", null, "\u2022 ", /* @__PURE__ */ React.createElement("strong", null, "\u042D\u043D\u0435\u0440\u0433\u0438\u044F:"), " \u0421\u043B\u0435\u0434\u0438\u0442\u0435 \u0437\u0430 \u0443\u0440\u043E\u0432\u043D\u0435\u043C, \u043F\u043E\u043A\u0443\u043F\u0430\u0439\u0442\u0435 \u043A\u043E\u0444\u0435-\u043C\u0430\u0448\u0438\u043D\u044B"))), /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-6 rounded-lg" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold text-orange-400 mb-3" }, "\u{1F3B2} \u0421\u043B\u0443\u0447\u0430\u0439\u043D\u044B\u0435 \u0441\u043E\u0431\u044B\u0442\u0438\u044F"), /* @__PURE__ */ React.createElement("div", { className: "space-y-2 text-sm" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F3C6} \u0425\u0430\u043A\u0430\u0442\u043E\u043D:"), " +100 \u043A\u043E\u0434, +50 \u0438\u0434\u0435\u0439, +10 \u0440\u0435\u043F\u0443\u0442\u0430\u0446\u0438\u044F"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F4B0} \u0418\u043D\u0432\u0435\u0441\u0442\u043E\u0440:"), " +$5000, +15 \u0440\u0435\u043F\u0443\u0442\u0430\u0446\u0438\u044F"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F525} \u0412\u0438\u0440\u0443\u0441\u043D\u043E\u0441\u0442\u044C:"), " +20 \u0440\u0435\u043F\u0443\u0442\u0430\u0446\u0438\u044F, +1000 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0435\u0439"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F3AF} \u041D\u043E\u0432\u0430\u044F \u0438\u0434\u0435\u044F:"), " +75 \u0438\u0434\u0435\u0439, +10 \u044D\u043D\u0435\u0440\u0433\u0438\u044F"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F41B} \u041A\u0440\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0431\u0430\u0433:"), " -50 \u043A\u043E\u0434, -5 \u0440\u0435\u043F\u0443\u0442\u0430\u0446\u0438\u044F, -20 \u044D\u043D\u0435\u0440\u0433\u0438\u044F"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F4BB} \u0412\u044B\u0433\u043E\u0440\u0430\u043D\u0438\u0435:"), " -30 \u044D\u043D\u0435\u0440\u0433\u0438\u044F, -25 \u043A\u043E\u0434"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u{1F4F1} \u041A\u043E\u043D\u043A\u0443\u0440\u0435\u043D\u0442:"), " -500 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0435\u0439, -10 \u0440\u0435\u043F\u0443\u0442\u0430\u0446\u0438\u044F")))), /* @__PURE__ */ React.createElement("div", { className: "text-center mt-8" }, /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: () => setMenuTab("main"),
+      className: "px-8 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold text-lg transition-colors"
+    },
+    "\u2190 \u041D\u0430\u0437\u0430\u0434 \u043A \u043C\u0435\u043D\u044E"
+  )));
+  if (showMenu) {
+    return /* @__PURE__ */ React.createElement("div", { className: "w-full h-full bg-gray-900 text-white p-4 overflow-auto" }, /* @__PURE__ */ React.createElement("div", { className: "max-w-4xl mx-auto" }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-center mb-8" }, /* @__PURE__ */ React.createElement("div", { className: "bg-gradient-to-r from-blue-900 to-purple-900 p-3 rounded-xl border-4 border-blue-500 shadow-2xl" }, /* @__PURE__ */ React.createElement("div", { className: "flex gap-4" }, /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => setMenuTab("main"),
+        className: `px-10 py-4 rounded-xl font-black text-xl transition-all duration-300 transform ${menuTab === "main" ? "bg-blue-500 text-white shadow-2xl scale-105 border-2 border-white" : "bg-gray-800 text-gray-200 hover:text-white hover:bg-gray-700 hover:scale-102 border-2 border-gray-600"}`
+      },
+      "\u{1F3E0} \u0413\u041B\u0410\u0412\u041D\u0410\u042F"
+    ), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => setMenuTab("faq"),
+        className: `px-10 py-4 rounded-xl font-black text-xl transition-all duration-300 transform ${menuTab === "faq" ? "bg-green-500 text-white shadow-2xl scale-105 border-2 border-white" : "bg-gray-800 text-gray-200 hover:text-white hover:bg-gray-700 hover:scale-102 border-2 border-gray-600"}`
+      },
+      "\u2753 FAQ & \u0413\u0410\u0419\u0414"
+    )))), menuTab === "faq" ? renderFAQ() : /* @__PURE__ */ React.createElement("div", { className: "text-center" }, /* @__PURE__ */ React.createElement("div", { className: "mb-8" }, /* @__PURE__ */ React.createElement("h1", { className: "text-5xl font-bold text-blue-400 mb-4" }, "\u{1F4BB} \u0421\u0422\u0410\u0420\u0422\u0410\u041F \u0422\u0410\u0419\u041A\u0423\u041D"), /* @__PURE__ */ React.createElement("h2", { className: "text-2xl text-gray-300 mb-6" }, "\u041E\u0442 \u043A\u043E\u0434\u0430 \u043A \u043A\u043E\u0440\u043F\u043E\u0440\u0430\u0446\u0438\u0438"), /* @__PURE__ */ React.createElement("p", { className: "text-lg text-gray-400 max-w-2xl mx-auto" }, "\u041D\u0430\u0447\u043D\u0438\u0442\u0435 \u043A\u0430\u043A \u0441\u043E\u043B\u043E-\u0440\u0430\u0437\u0440\u0430\u0431\u043E\u0442\u0447\u0438\u043A \u0438 \u043F\u043E\u0441\u0442\u0440\u043E\u0439\u0442\u0435 IT-\u0438\u043C\u043F\u0435\u0440\u0438\u044E! \u0418\u0437\u0443\u0447\u0430\u0439\u0442\u0435 \u043D\u0430\u0432\u044B\u043A\u0438, \u0441\u043E\u0437\u0434\u0430\u0432\u0430\u0439\u0442\u0435 \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u044B, \u043D\u0430\u043D\u0438\u043C\u0430\u0439\u0442\u0435 \u043A\u043E\u043C\u0430\u043D\u0434\u0443 \u0438 \u0441\u0442\u0430\u043D\u044C\u0442\u0435 tech-\u043C\u0430\u0433\u043D\u0430\u0442\u043E\u043C.")), hasSavedGame && /* @__PURE__ */ React.createElement("div", { className: "mb-8 p-6 bg-green-900 border border-green-600 rounded-lg" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold mb-4" }, "\u{1F4CA} \u0421\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u0430\u044F \u0438\u0433\u0440\u0430"), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 md:grid-cols-4 gap-4 text-sm" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "text-gray-400" }, "\u0414\u0435\u043D\u044C"), /* @__PURE__ */ React.createElement("div", { className: "font-bold" }, gameState.day)), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "text-gray-400" }, "\u0421\u0442\u0430\u0434\u0438\u044F"), /* @__PURE__ */ React.createElement("div", { className: "font-bold" }, gameState.company.stage === "solo" && "\u{1F9D1}\u200D\u{1F4BB} \u0421\u043E\u043B\u043E", gameState.company.stage === "freelancer" && "\u{1F4BC} \u0424\u0440\u0438\u043B\u0430\u043D\u0441\u0435\u0440", gameState.company.stage === "mvp" && "\u{1F680} MVP", gameState.company.stage === "startup" && "\u2B50 \u0421\u0442\u0430\u0440\u0442\u0430\u043F", gameState.company.stage === "company" && "\u{1F3E2} \u041A\u043E\u043C\u043F\u0430\u043D\u0438\u044F", gameState.company.stage === "corporation" && "\u{1F30D} \u041A\u043E\u0440\u043F\u043E\u0440\u0430\u0446\u0438\u044F")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "text-gray-400" }, "\u0414\u0435\u043D\u044C\u0433\u0438"), /* @__PURE__ */ React.createElement("div", { className: "font-bold" }, "$", gameState.resources.money)), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "text-gray-400" }, "\u0421\u043B\u043E\u0436\u043D\u043E\u0441\u0442\u044C"), /* @__PURE__ */ React.createElement("div", { className: "font-bold" }, difficultySettings[currentDifficulty].name))), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: continueGame,
+        className: "mt-4 px-8 py-3 bg-green-600 hover:bg-green-500 rounded-lg font-bold text-lg transition-colors"
+      },
+      "\u041F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C \u0438\u0433\u0440\u0443"
+    )), /* @__PURE__ */ React.createElement("div", { className: "mb-8" }, /* @__PURE__ */ React.createElement("h3", { className: "text-2xl font-bold mb-6" }, "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u043B\u043E\u0436\u043D\u043E\u0441\u0442\u044C"), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-1 md:grid-cols-3 gap-6" }, Object.entries(difficultySettings).map(([key, settings]) => /* @__PURE__ */ React.createElement("div", { key, className: "bg-gray-800 p-6 rounded-lg border-2 border-gray-700 hover:border-blue-500 transition-colors" }, /* @__PURE__ */ React.createElement("div", { className: "text-2xl mb-3" }, settings.name), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-gray-400 mb-4" }, settings.description), /* @__PURE__ */ React.createElement("div", { className: "text-xs text-left space-y-1 mb-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("strong", null, "\u0421\u0442\u0430\u0440\u0442\u043E\u0432\u044B\u0435 \u0440\u0435\u0441\u0443\u0440\u0441\u044B:")), /* @__PURE__ */ React.createElement("div", null, "\u{1F4BB} \u041A\u043E\u0434: ", settings.startResources.code), /* @__PURE__ */ React.createElement("div", null, "\u{1F4A1} \u0418\u0434\u0435\u0438: ", settings.startResources.ideas), /* @__PURE__ */ React.createElement("div", null, "\u{1F4B0} \u0414\u0435\u043D\u044C\u0433\u0438: $", settings.startResources.money), /* @__PURE__ */ React.createElement("div", null, "\u2B50 \u0420\u0435\u043F\u0443\u0442\u0430\u0446\u0438\u044F: ", settings.startResources.reputation)), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => startNewGame(key),
+        className: "w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded font-bold transition-colors"
+      },
+      "\u041D\u0430\u0447\u0430\u0442\u044C \u0438\u0433\u0440\u0443"
+    ))))), /* @__PURE__ */ React.createElement("div", { className: "text-sm text-gray-500" }, /* @__PURE__ */ React.createElement("p", null, "\u{1F4A1} \u0421\u043E\u0432\u0435\u0442: \u041D\u0430\u0447\u043D\u0438\u0442\u0435 \u0441 \u043B\u0451\u0433\u043A\u043E\u0433\u043E \u0443\u0440\u043E\u0432\u043D\u044F, \u0435\u0441\u043B\u0438 \u0438\u0433\u0440\u0430\u0435\u0442\u0435 \u0432\u043F\u0435\u0440\u0432\u044B\u0435!")))));
+  }
+  return /* @__PURE__ */ React.createElement("div", { className: "w-full h-full bg-gray-900 text-white p-4 overflow-auto" }, /* @__PURE__ */ React.createElement("div", { className: "max-w-6xl mx-auto" }, /* @__PURE__ */ React.createElement("div", { className: "text-center mb-6" }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between items-center mb-4" }, /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: returnToMenu,
+      className: "px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm transition-colors"
+    },
+    "\u2190 \u041C\u0435\u043D\u044E"
+  ), /* @__PURE__ */ React.createElement("div", { className: "text-sm text-gray-400" }, "\u0421\u043B\u043E\u0436\u043D\u043E\u0441\u0442\u044C: ", difficultySettings[currentDifficulty].name)), /* @__PURE__ */ React.createElement("h1", { className: "text-3xl font-bold text-blue-400 mb-2" }, "\u{1F4BB} \u0421\u0422\u0410\u0420\u0422\u0410\u041F \u0422\u0410\u0419\u041A\u0423\u041D: \u041E\u0422 \u041A\u041E\u0414\u0410 \u041A \u041A\u041E\u0420\u041F\u041E\u0420\u0410\u0426\u0418\u0418"), /* @__PURE__ */ React.createElement("div", { className: "text-lg" }, "\u0414\u0435\u043D\u044C ", gameState.day, " | \u0423\u0440\u043E\u0432\u0435\u043D\u044C ", gameState.level, " |", /* @__PURE__ */ React.createElement("span", { className: "ml-2 px-2 py-1 bg-purple-600 rounded text-sm" }, gameState.company.stage === "solo" && "\u{1F9D1}\u200D\u{1F4BB} \u0421\u043E\u043B\u043E-\u0440\u0430\u0437\u0440\u0430\u0431\u043E\u0442\u0447\u0438\u043A", gameState.company.stage === "freelancer" && "\u{1F4BC} \u0424\u0440\u0438\u043B\u0430\u043D\u0441\u0435\u0440", gameState.company.stage === "mvp" && "\u{1F680} MVP", gameState.company.stage === "startup" && "\u2B50 \u0421\u0442\u0430\u0440\u0442\u0430\u043F", gameState.company.stage === "company" && "\u{1F3E2} \u041A\u043E\u043C\u043F\u0430\u043D\u0438\u044F", gameState.company.stage === "corporation" && "\u{1F30D} \u041A\u043E\u0440\u043F\u043E\u0440\u0430\u0446\u0438\u044F"))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-5 gap-4 mb-6" }, /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-3 rounded-lg text-center" }, /* @__PURE__ */ React.createElement("div", { className: "text-2xl" }, "\u{1F4BB}"), /* @__PURE__ */ React.createElement("div", { className: "text-sm text-gray-400" }, "\u041A\u043E\u0434"), /* @__PURE__ */ React.createElement("div", { className: `text-xl font-bold ${getStatusColor(gameState.resources.code, 500)}` }, gameState.resources.code)), /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-3 rounded-lg text-center" }, /* @__PURE__ */ React.createElement("div", { className: "text-2xl" }, "\u{1F4A1}"), /* @__PURE__ */ React.createElement("div", { className: "text-sm text-gray-400" }, "\u0418\u0434\u0435\u0438"), /* @__PURE__ */ React.createElement("div", { className: `text-xl font-bold ${getStatusColor(gameState.resources.ideas, 200)}` }, gameState.resources.ideas)), /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-3 rounded-lg text-center" }, /* @__PURE__ */ React.createElement("div", { className: "text-2xl" }, "\u{1F4B0}"), /* @__PURE__ */ React.createElement("div", { className: "text-sm text-gray-400" }, "\u0414\u0435\u043D\u044C\u0433\u0438"), /* @__PURE__ */ React.createElement("div", { className: `text-xl font-bold ${getStatusColor(gameState.resources.money, 1e4)}` }, "$", gameState.resources.money)), /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-3 rounded-lg text-center" }, /* @__PURE__ */ React.createElement("div", { className: "text-2xl" }, "\u2B50"), /* @__PURE__ */ React.createElement("div", { className: "text-sm text-gray-400" }, "\u0420\u0435\u043F\u0443\u0442\u0430\u0446\u0438\u044F"), /* @__PURE__ */ React.createElement("div", { className: `text-xl font-bold ${getStatusColor(gameState.resources.reputation, 100)}` }, gameState.resources.reputation)), /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-3 rounded-lg text-center" }, /* @__PURE__ */ React.createElement("div", { className: "text-2xl" }, "\u26A1"), /* @__PURE__ */ React.createElement("div", { className: "text-sm text-gray-400" }, "\u042D\u043D\u0435\u0440\u0433\u0438\u044F"), /* @__PURE__ */ React.createElement("div", { className: `text-xl font-bold ${getStatusColor(gameState.resources.energy, 100)}` }, gameState.resources.energy))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 gap-4 mb-6" }, /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-4 rounded-lg" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold mb-3" }, "\u{1F4CA} \u0421\u0442\u0430\u0442\u0443\u0441 \u043A\u043E\u043C\u043F\u0430\u043D\u0438\u0438"), /* @__PURE__ */ React.createElement("div", { className: "space-y-2" }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between" }, /* @__PURE__ */ React.createElement("span", { className: "text-gray-400" }, "\u0421\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u0438:"), /* @__PURE__ */ React.createElement("span", { className: "font-bold text-blue-400" }, gameState.company.employees)), /* @__PURE__ */ React.createElement("div", { className: "flex justify-between" }, /* @__PURE__ */ React.createElement("span", { className: "text-gray-400" }, "\u041F\u0440\u043E\u0434\u0443\u043A\u0442\u044B:"), /* @__PURE__ */ React.createElement("span", { className: "font-bold text-green-400" }, gameState.company.products)), /* @__PURE__ */ React.createElement("div", { className: "flex justify-between" }, /* @__PURE__ */ React.createElement("span", { className: "text-gray-400" }, "\u041F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0438:"), /* @__PURE__ */ React.createElement("span", { className: "font-bold text-purple-400" }, gameState.company.users.toLocaleString())), /* @__PURE__ */ React.createElement("div", { className: "flex justify-between" }, /* @__PURE__ */ React.createElement("span", { className: "text-gray-400" }, "\u0414\u043E\u0445\u043E\u0434:"), /* @__PURE__ */ React.createElement("span", { className: "font-bold text-yellow-400" }, "$", gameState.company.revenue)))), /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-4 rounded-lg" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold mb-3" }, "\u{1F3AF} \u041D\u0430\u0432\u044B\u043A\u0438"), /* @__PURE__ */ React.createElement("div", { className: "space-y-2" }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between" }, /* @__PURE__ */ React.createElement("span", { className: "text-gray-400" }, "Frontend:"), /* @__PURE__ */ React.createElement("span", { className: "font-bold text-blue-400" }, "LVL ", gameState.skills.frontend)), /* @__PURE__ */ React.createElement("div", { className: "flex justify-between" }, /* @__PURE__ */ React.createElement("span", { className: "text-gray-400" }, "Backend:"), /* @__PURE__ */ React.createElement("span", { className: "font-bold text-green-400" }, "LVL ", gameState.skills.backend)), /* @__PURE__ */ React.createElement("div", { className: "flex justify-between" }, /* @__PURE__ */ React.createElement("span", { className: "text-gray-400" }, "Design:"), /* @__PURE__ */ React.createElement("span", { className: "font-bold text-purple-400" }, "LVL ", gameState.skills.design)), /* @__PURE__ */ React.createElement("div", { className: "flex justify-between" }, /* @__PURE__ */ React.createElement("span", { className: "text-gray-400" }, "Marketing:"), /* @__PURE__ */ React.createElement("span", { className: "font-bold text-red-400" }, "LVL ", gameState.skills.marketing)), /* @__PURE__ */ React.createElement("div", { className: "flex justify-between" }, /* @__PURE__ */ React.createElement("span", { className: "text-gray-400" }, "Management:"), /* @__PURE__ */ React.createElement("span", { className: "font-bold text-yellow-400" }, "LVL ", gameState.skills.management))))), /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-4 rounded-lg mb-6" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold mb-3" }, "\u{1F4C8} \u041F\u0440\u043E\u0433\u0440\u0435\u0441\u0441"), /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-4" }, /* @__PURE__ */ React.createElement("span", { className: "text-gray-400" }, "EXP:"), /* @__PURE__ */ React.createElement("div", { className: "flex-1 bg-gray-700 rounded-full h-4" }, /* @__PURE__ */ React.createElement(
+    "div",
+    {
+      className: "bg-gradient-to-r from-blue-500 to-purple-500 h-4 rounded-full transition-all duration-300",
+      style: { width: `${gameState.exp / (gameState.level * 100) * 100}%` }
+    }
+  )), /* @__PURE__ */ React.createElement("span", { className: "font-bold text-blue-400" }, gameState.exp, "/", gameState.level * 100))), events.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "bg-purple-900 border border-purple-600 p-4 rounded-lg mb-6" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold mb-3" }, "\u{1F4E2} \u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 \u0441\u043E\u0431\u044B\u0442\u0438\u044F"), events.map((event, index) => /* @__PURE__ */ React.createElement("div", { key: index, className: "mb-2 last:mb-0" }, /* @__PURE__ */ React.createElement("div", { className: "font-bold" }, event.title), /* @__PURE__ */ React.createElement("div", { className: "text-sm text-gray-300" }, event.description)))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-1 lg:grid-cols-3 gap-6" }, /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-4 rounded-lg" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold mb-4" }, "\u{1F393} \u041F\u0440\u043E\u043A\u0430\u0447\u043A\u0430 \u043D\u0430\u0432\u044B\u043A\u043E\u0432"), /* @__PURE__ */ React.createElement("div", { className: "space-y-3" }, Object.entries(gameState.skills).map(([skill, level]) => /* @__PURE__ */ React.createElement("div", { key: skill, className: "flex items-center justify-between bg-gray-700 p-3 rounded" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "font-bold capitalize" }, skill), /* @__PURE__ */ React.createElement("div", { className: "text-xs text-gray-400" }, "\u0423\u0440\u043E\u0432\u0435\u043D\u044C ", level), /* @__PURE__ */ React.createElement("div", { className: "text-xs text-blue-400" }, "\u0421\u0442\u043E\u0438\u043C\u043E\u0441\u0442\u044C: ", (level + 1) * 50, " \u043A\u043E\u0434, ", (level + 1) * 25, " \u0438\u0434\u0435\u0439")), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: () => learnSkill(skill),
+      disabled: gameState.resources.code < (level + 1) * 50 || gameState.resources.ideas < (level + 1) * 25,
+      className: `px-3 py-1 rounded text-sm font-bold transition-colors ${gameState.resources.code >= (level + 1) * 50 && gameState.resources.ideas >= (level + 1) * 25 ? "bg-blue-600 hover:bg-blue-500 text-white" : "bg-gray-600 text-gray-400 cursor-not-allowed"}`
+    },
+    "\u0418\u0437\u0443\u0447\u0438\u0442\u044C"
+  ))))), /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-4 rounded-lg" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold mb-4" }, "\u{1F680} \u0420\u0430\u0437\u0432\u0438\u0442\u0438\u0435 \u0431\u0438\u0437\u043D\u0435\u0441\u0430"), /* @__PURE__ */ React.createElement("div", { className: "space-y-3" }, /* @__PURE__ */ React.createElement("div", { className: "bg-gray-700 p-3 rounded" }, /* @__PURE__ */ React.createElement("div", { className: "font-bold" }, "\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u043F\u0440\u043E\u0434\u0443\u043A\u0442"), /* @__PURE__ */ React.createElement("div", { className: "text-xs text-gray-400" }, "200 \u043A\u043E\u0434, 100 \u0438\u0434\u0435\u0439, $1000"), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: createProduct,
+      disabled: gameState.resources.code < 200 || gameState.resources.ideas < 100 || gameState.resources.money < 1e3,
+      className: `mt-2 px-3 py-1 rounded text-sm font-bold transition-colors w-full ${gameState.resources.code >= 200 && gameState.resources.ideas >= 100 && gameState.resources.money >= 1e3 ? "bg-green-600 hover:bg-green-500 text-white" : "bg-gray-600 text-gray-400 cursor-not-allowed"}`
+    },
+    "\u0417\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u044C MVP"
+  )), /* @__PURE__ */ React.createElement("div", { className: "bg-gray-700 p-3 rounded" }, /* @__PURE__ */ React.createElement("div", { className: "font-bold" }, "\u041D\u0430\u043D\u044F\u0442\u044C \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u0430"), /* @__PURE__ */ React.createElement("div", { className: "text-xs text-gray-400" }, "$", 2e3 + gameState.company.employees * 500, ", 10 \u0440\u0435\u043F\u0443\u0442\u0430\u0446\u0438\u0438"), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: hireEmployee,
+      disabled: gameState.resources.money < 2e3 + gameState.company.employees * 500 || gameState.resources.reputation < 10,
+      className: `mt-2 px-3 py-1 rounded text-sm font-bold transition-colors w-full ${gameState.resources.money >= 2e3 + gameState.company.employees * 500 && gameState.resources.reputation >= 10 ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-gray-600 text-gray-400 cursor-not-allowed"}`
+    },
+    "\u041D\u0430\u043D\u044F\u0442\u044C"
+  )))), /* @__PURE__ */ React.createElement("div", { className: "bg-gray-800 p-4 rounded-lg" }, /* @__PURE__ */ React.createElement("h3", { className: "text-xl font-bold mb-4" }, "\u{1F6E0}\uFE0F \u041E\u0431\u043E\u0440\u0443\u0434\u043E\u0432\u0430\u043D\u0438\u0435"), /* @__PURE__ */ React.createElement("div", { className: "space-y-3" }, Object.entries(buildings).map(([key, building]) => /* @__PURE__ */ React.createElement("div", { key, className: "flex items-center justify-between bg-gray-700 p-2 rounded" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ React.createElement("span", { className: "text-lg" }, building.icon), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "text-sm font-bold" }, building.name), /* @__PURE__ */ React.createElement("div", { className: "text-xs text-gray-400" }, building.effect))), /* @__PURE__ */ React.createElement("div", { className: "text-right" }, /* @__PURE__ */ React.createElement("div", { className: "text-xs text-gray-400" }, "x", gameState.buildings[key]), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: () => buildStructure(key),
+      disabled: !canBuild(key),
+      className: `px-2 py-1 rounded text-xs font-bold transition-colors ${canBuild(key) ? "bg-green-600 hover:bg-green-500 text-white" : "bg-gray-600 text-gray-400 cursor-not-allowed"}`
+    },
+    "\u041A\u0443\u043F\u0438\u0442\u044C"
+  ))))))), /* @__PURE__ */ React.createElement("div", { className: "mt-6 bg-blue-900 border border-blue-600 p-4 rounded-lg" }, /* @__PURE__ */ React.createElement("h3", { className: "font-bold mb-2" }, "\u{1F4A1} \u0413\u0430\u0439\u0434 \u043F\u043E \u0440\u0430\u0437\u0432\u0438\u0442\u0438\u044E:"), /* @__PURE__ */ React.createElement("ul", { className: "text-sm space-y-1" }, /* @__PURE__ */ React.createElement("li", null, "\u2022 ", /* @__PURE__ */ React.createElement("strong", null, "\u0421\u043E\u043B\u043E-\u0440\u0430\u0437\u0440\u0430\u0431\u043E\u0442\u0447\u0438\u043A:"), " \u0418\u0437\u0443\u0447\u0430\u0439\u0442\u0435 \u043D\u0430\u0432\u044B\u043A\u0438, \u043F\u0438\u0448\u0438\u0442\u0435 \u043A\u043E\u0434, \u0433\u0435\u043D\u0435\u0440\u0438\u0440\u0443\u0439\u0442\u0435 \u0438\u0434\u0435\u0438"), /* @__PURE__ */ React.createElement("li", null, "\u2022 ", /* @__PURE__ */ React.createElement("strong", null, "\u0424\u0440\u0438\u043B\u0430\u043D\u0441\u0435\u0440:"), " \u041D\u0430\u043A\u043E\u043F\u0438\u0442\u0435 $5000, \u0441\u043E\u0437\u0434\u0430\u0432\u0430\u0439\u0442\u0435 \u043F\u0435\u0440\u0432\u044B\u0435 \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u044B"), /* @__PURE__ */ React.createElement("li", null, "\u2022 ", /* @__PURE__ */ React.createElement("strong", null, "MVP:"), " \u0417\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u0435 \u043F\u0440\u043E\u0434\u0443\u043A\u0442 \u0434\u043B\u044F \u043F\u0435\u0440\u0435\u0445\u043E\u0434\u0430 \u043A \u0441\u0442\u0430\u0440\u0442\u0430\u043F\u0443"), /* @__PURE__ */ React.createElement("li", null, "\u2022 ", /* @__PURE__ */ React.createElement("strong", null, "\u0421\u0442\u0430\u0440\u0442\u0430\u043F:"), " \u041D\u0430\u043D\u0438\u043C\u0430\u0439\u0442\u0435 \u043A\u043E\u043C\u0430\u043D\u0434\u0443 (2+ \u0447\u0435\u043B\u043E\u0432\u0435\u043A\u0430)"), /* @__PURE__ */ React.createElement("li", null, "\u2022 ", /* @__PURE__ */ React.createElement("strong", null, "\u041A\u043E\u043C\u043F\u0430\u043D\u0438\u044F:"), " \u0420\u0430\u0441\u0448\u0438\u0440\u044F\u0439\u0442\u0435\u0441\u044C \u0434\u043E 10+ \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u043E\u0432"), /* @__PURE__ */ React.createElement("li", null, "\u2022 ", /* @__PURE__ */ React.createElement("strong", null, "\u041A\u043E\u0440\u043F\u043E\u0440\u0430\u0446\u0438\u044F:"), " \u041D\u0430\u043A\u043E\u043F\u0438\u0442\u0435 $100,000 \u0434\u043B\u044F IPO"), /* @__PURE__ */ React.createElement("li", null, "\u2022 \u0412\u044B\u0441\u043E\u043A\u0438\u0435 \u043D\u0430\u0432\u044B\u043A\u0438 \u0443\u0432\u0435\u043B\u0438\u0447\u0438\u0432\u0430\u044E\u0442 \u043F\u0440\u043E\u0438\u0437\u0432\u043E\u0434\u0441\u0442\u0432\u043E \u0440\u0435\u0441\u0443\u0440\u0441\u043E\u0432"), /* @__PURE__ */ React.createElement("li", null, "\u2022 \u0421\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u0438 \u043F\u0440\u0438\u043D\u043E\u0441\u044F\u0442 \u043F\u0430\u0441\u0441\u0438\u0432\u043D\u044B\u0439 \u0434\u043E\u0445\u043E\u0434, \u043D\u043E \u0442\u0440\u0435\u0431\u0443\u044E\u0442 \u0437\u0430\u0440\u043F\u043B\u0430\u0442\u0443")))));
+};
+var stdin_default = StartupTycoon;
+export {
+  stdin_default as default
+};
